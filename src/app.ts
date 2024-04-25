@@ -1,3 +1,4 @@
+import { createUser, login } from 'controllers/users';
 import 'dotenv/config';
 import expess, {
   json, Request, Response, NextFunction 
@@ -22,6 +23,8 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 app.use(router);
+app.post('/signin', login);
+app.post('/signup', createUser); 
 
 const connect = async () => {
     try {

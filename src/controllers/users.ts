@@ -1,7 +1,25 @@
 import { Response, Request } from 'express';
 import { constants } from 'http2';
 import { Error as MongoodeError } from 'mongoose';
-import User from '../models/user';
+import jwt from 'jsonwebtoken';
+import User, { IUser } from '../models/user';
+
+export const login = async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+    return User.findUserByCredentials(email, password)
+        .then((user) => {
+        // создадим токен
+        const token = jwt.sign({ _id: user._id }, 'some-secret-key');
+    
+        // вернём токен
+        res.send({ token });
+        })
+        .catch((err) => {
+        res
+            .status(401)
+            .send({ message: err.message });
+        });
+}; 
 
 export const getUsers = async (req: Request, res: Response) => {
     try {
@@ -17,7 +35,6 @@ export const getUserById = async (req: Request, res: Response) => {
     try {
         const { userId } = req.params;
         const user = await User.findById(userId);
-
         return res.send(user);
     } catch (error) {
         if (error instanceof MongoodeError.CastError) {
@@ -31,6 +48,7 @@ export const getUserById = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
     try {
+        req.body.password = await bcrypt.hash(req.body.password, 10);
         const newUser = await User.create(req.body);
         return res.status(constants.HTTP_STATUS_CREATED).send(newUser);
     } catch (error) {
