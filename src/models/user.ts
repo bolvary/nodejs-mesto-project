@@ -1,9 +1,11 @@
-import mongoose, { model, Schema } from 'mongoose';
-import bcrypt from 'bcryptjs';
+import mongoose, { model, Schema, Document } from 'mongoose';
+import { compare } from 'bcryptjs';
+import validator from 'validator';
+import { AutorizationError } from '../helpers/errors';
 
 const { isEmail } = require('validator');
 
-export interface IUser {
+export interface IUser extends Document {
     name: string,
     about: string,
     email: string,
@@ -11,11 +13,11 @@ export interface IUser {
     avatar: string,
 }
 
-interface UserModel extends mongoose.Model<IUser> {
-    findUserByCredentials: (email: string, password: string) => Promise<mongoose.Document<unknown, any, IUser>>
-  }
+interface IUserModel extends mongoose.Model<IUser> {
+    findUserByCredentials: (email: string, password: string) => Promise<Document<unknown, any, IUser>>
+}
 
-const userSchema = new Schema<IUser, UserModel>(
+export const userSchema: Schema = new Schema<IUser>(
     {
         name: {
             type: String,
@@ -29,16 +31,15 @@ const userSchema = new Schema<IUser, UserModel>(
             required: true,
             unique: true,
             validate: {
-                validator: function(email: string) {
-                  return isEmail(email);
-                },
-                message: props => `${props.value} is not a valid email!`
-              }
+                validator: (email: string) => isEmail(email),
+                message: (props) => `${props.value} невалидный формат email`,
+            },
         },
 
         password: {
             type: String,
             required: true,
+            select: false,
         },
 
         about: {
@@ -50,6 +51,14 @@ const userSchema = new Schema<IUser, UserModel>(
 
         avatar: {
             type: String,
+            validate: {
+                validator: (value: string) => validator.isURL(value, {
+                    protocols: ['http', 'https'],
+                    require_tld: true,
+                    require_protocol: true,
+                }),
+                message: 'Невалидный урл аватарки',
+            },
             default: 'https://pictures.s3.yandex.net/resources/jacques-cousteau_1604399756.png',
         },
     },
@@ -59,21 +68,22 @@ const userSchema = new Schema<IUser, UserModel>(
 );
 
 userSchema.static('findUserByCredentials', function findUserByCredentials(email: string, password: string) {
-    return this.findOne({ email })
-        .then((user) => {
-        if (!user) {
-            return Promise.reject(new Error('Неправильные почта или пароль'));
-        }
-
-        return bcrypt.compare(password, user.password)
-            .then((matched: boolean) => {
-            if (!matched) {
-                return Promise.reject(new Error('Неправильные почта или пароль'));
+    return this.findOne({ email }).select('+password')
+        .then((user: IUser) => {
+            if (!user) {
+                throw new AutorizationError();
             }
 
-            return user;
-            });
+            return compare(password, user.password)
+                .then((matched: boolean) => {
+                    if (!matched) {
+                        throw new AutorizationError();
+                    }
+                    return user;
+                });
         });
 });
 
-export default model('user', userSchema);
+export const User: IUserModel = model<IUser, IUserModel>('User', userSchema);
+
+export default User;

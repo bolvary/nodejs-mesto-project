@@ -1,67 +1,63 @@
-import { Response, Request } from 'express';
+import { Response, Request, NextFunction } from 'express';
 import { constants } from 'http2';
-import { Error as MongoodeError } from 'mongoose';
-import jwt from 'jsonwebtoken';
-import User, { IUser } from '../models/user';
+import { hash } from 'bcryptjs';
+import jwt, { Secret } from 'jsonwebtoken';
 
-export const login = async (req: Request, res: Response) => {
+import { ConflictError, NotFoundError } from '../helpers/errors';
+import User from '../models/user';
+
+const { SECRET } = process.env;
+
+export const createUser = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { email } = req.body;
+        const candidate = await User.findOne({ email });
+        if (candidate) {
+            throw new ConflictError('Пользователь с таким email уже существует');
+        }
+        req.body.password = await hash(req.body.password, 10);
+        const newUser = await User.create(req.body);
+        return res.status(constants.HTTP_STATUS_CREATED).send(newUser);
+    } catch (error) {
+        return next(error);
+    }
+};
+
+export const login = async (req: Request, res: Response, next: NextFunction) => {
     const { email, password } = req.body;
     return User.findUserByCredentials(email, password)
         .then((user) => {
-        // создадим токен
-        const token = jwt.sign({ _id: user._id }, 'some-secret-key');
-    
-        // вернём токен
-        res.send({ token });
-        })
-        .catch((err) => {
-        res
-            .status(401)
-            .send({ message: err.message });
-        });
-}; 
+            const token = jwt.sign({ _id: user._id }, SECRET as Secret, { expiresIn: '7d' });
 
-export const getUsers = async (req: Request, res: Response) => {
+            res.send({ token });
+        })
+        .catch(next);
+};
+
+export const getUsers = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const users = await User.find({});
 
         return res.send(users);
     } catch (error) {
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };
 
-export const getUserById = async (req: Request, res: Response) => {
+export const getUserById = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { userId } = req.params;
         const user = await User.findById(userId);
+        if (!user) {
+            throw new NotFoundError('Пользователь не найден');
+        }
         return res.send(user);
     } catch (error) {
-        if (error instanceof MongoodeError.CastError) {
-            return res.status(constants.HTTP_STATUS_NOT_FOUND).send({
-                message: 'Пользователь по указанному _id не найден',
-            });
-        }
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };
 
-export const createUser = async (req: Request, res: Response) => {
-    try {
-        req.body.password = await bcrypt.hash(req.body.password, 10);
-        const newUser = await User.create(req.body);
-        return res.status(constants.HTTP_STATUS_CREATED).send(newUser);
-    } catch (error) {
-        if (error instanceof MongoodeError.ValidationError) {
-            return res.status(constants.HTTP_STATUS_BAD_REQUEST).send({
-                message: 'Переданы некорректные данные при создании пользователя',
-            });
-        }
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
-    }
-};
-
-export const updateMyProfile = async (req: Request, res: Response) => {
+export const updateMyProfile = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const myId = req.user._id;
         const { name, about } = req.body;
@@ -72,31 +68,34 @@ export const updateMyProfile = async (req: Request, res: Response) => {
             });
         }
 
-        await User.findByIdAndUpdate({ _id: myId }, { name, about }, { new: true, runValidators: true });
-        return res.send({ message: 'Данные пользователя обновлены успешно' });
+        const newInfo = await User.findByIdAndUpdate({ _id: myId }, { name, about }, {
+            new: true,
+            runValidators: true,
+        });
+        return res.send({ message: 'Данные пользователя обновлены успешно', newInfo });
     } catch (error) {
-        if (error instanceof MongoodeError.ValidationError) {
-            return res.status(constants.HTTP_STATUS_BAD_REQUEST).send({
-                message: 'Переданы некорректные данные при создании пользователя',
-            });
-        }
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };
 
-export const updateMyAvatar = async (req: Request, res: Response) => {
+export const getMyProfile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const userId = req.user._id;
+        const user = await User.findById(userId);
+        return res.send(user);
+    } catch (error) {
+        return next(error);
+    }
+};
+
+export const updateMyAvatar = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const myId = req.user._id;
         const { avatar } = req.body;
 
-        await User.findByIdAndUpdate({ _id: myId }, { avatar }, { new: true, runValidators: true });
-        return res.send({ message: 'Аватарка обновлена успешно' });
+        const newAvatar = await User.findByIdAndUpdate({ _id: myId }, { avatar }, { new: true, runValidators: true });
+        return res.send({ message: 'Аватарка обновлена успешно', newAvatar });
     } catch (error) {
-        if (error instanceof MongoodeError.ValidationError) {
-            return res.status(constants.HTTP_STATUS_BAD_REQUEST).send({
-                message: 'Переданы некорректные данные при обновлении аватара',
-            });
-        }
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };
