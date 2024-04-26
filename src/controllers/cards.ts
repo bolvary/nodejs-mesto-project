@@ -1,59 +1,49 @@
-import { Response, Request } from 'express';
+import { Response, Request, NextFunction } from 'express';
 import { constants } from 'http2';
-import { Error as MongoodeError } from 'mongoose';
 
+import { AccessDenided, NotFoundError } from '../helpers/errors';
 import Card from '../models/card';
 
-export const getCards = async (req: Request, res: Response) => {
+export const getCards = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const cards = await Card.find({});
-        return res.status(constants.HTTP_STATUS_CREATED).send(cards);
+        return res.status(constants.HTTP_STATUS_OK).send(cards);
     } catch (error) {
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };
 
-export const deleteCardById = async (req: Request, res: Response) => {
+export const deleteCardById = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { cardId } = req.params;
-        const removeCard = Card.findById(cardId);
+        const userId = req.user._id;
+        const removeCard = await Card.findOneAndRemove({ _id: cardId, owner: userId });
 
-        await removeCard.deleteOne();
+        if (!removeCard) {
+            throw new AccessDenided('Нельзя удалить карточку, которая не принадлежит пользователю');
+        }
         return res.send({ message: 'Карточка удалена' });
     } catch (error) {
-        if (error instanceof MongoodeError.CastError) {
-            return res.status(constants.HTTP_STATUS_BAD_REQUEST).send({
-                message: 'Карточка с указанным _id не найдена',
-            });
-        }
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };
 
-export const createCard = async (req: Request, res: Response) => {
+export const createCard = async (req: Request, res: Response, next: NextFunction) => {
     try {
         req.body.owner = req.user._id;
         const newCard = await Card.create(req.body);
         return res.status(constants.HTTP_STATUS_CREATED).send(newCard);
     } catch (error) {
-        if (error instanceof MongoodeError.ValidationError) {
-            return res.status(constants.HTTP_STATUS_BAD_REQUEST).send({
-                message: 'Переданы некорректные данные при создании карточки',
-            });
-        }
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };
 
-export const likeCard = async (req: Request, res: Response) => {
+export const likeCard = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const userId = req.user._id;
         const { cardId } = req.params;
-        if (!cardId) {
-            return res.status(constants.HTTP_STATUS_NOT_FOUND).send({ message: 'Передан несуществующий _id карточки' });
-        }
 
-        await Card.findByIdAndUpdate(
+        const card = await Card.findByIdAndUpdate(
             {
                 _id: cardId,
                 likes: { $nin: [userId] },
@@ -61,18 +51,16 @@ export const likeCard = async (req: Request, res: Response) => {
             { $addToSet: { likes: userId } },
             { new: true },
         );
+        if (!card) {
+            throw new NotFoundError('Карточки не существует или она была удалена');
+        }
         return res.send({ message: 'Лайк поставлен' });
     } catch (error) {
-        if (error instanceof MongoodeError.CastError) {
-            return res.status(constants.HTTP_STATUS_BAD_REQUEST).send({
-                message: 'Некорректные данные для постановки лайка',
-            });
-        }
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };
 
-export const dislikeCard = async (req: Request, res: Response) => {
+export const dislikeCard = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const userId = req.user._id;
         const { cardId } = req.params;
@@ -81,7 +69,7 @@ export const dislikeCard = async (req: Request, res: Response) => {
             return res.status(constants.HTTP_STATUS_NOT_FOUND).send({ message: 'Передан несуществующий _id карточки' });
         }
 
-        await Card.findByIdAndUpdate(
+        const card = await Card.findByIdAndUpdate(
             {
                 _id: cardId,
                 likes: { $in: [userId] },
@@ -89,13 +77,11 @@ export const dislikeCard = async (req: Request, res: Response) => {
             { $pull: { likes: req.user._id } },
             { new: true },
         );
+        if (!card) {
+            throw new NotFoundError('Карточки не существует или она была удалена');
+        }
         return res.send({ message: 'Лайк снят' });
     } catch (error) {
-        if (error instanceof MongoodeError.CastError) {
-            return res.status(constants.HTTP_STATUS_BAD_REQUEST).send({
-                message: 'Некорректные данные для снятия лайка',
-            });
-        }
-        return res.status(constants.HTTP_STATUS_INTERNAL_SERVER_ERROR).send({ message: 'Ошибка на стороне сервера' });
+        return next(error);
     }
 };

@@ -1,27 +1,46 @@
+import expess, { json } from 'express';
 import 'dotenv/config';
-import expess, {
-  json, Request, Response, NextFunction 
-} from 'express';
 import mongoose from 'mongoose';
+import { errors as celebrateErrors, celebrate, Joi } from 'celebrate';
+
+import { createUser, login } from './controllers/users';
+import auth from './middlewares/auth';
+import handleErrors from './middlewares/handleErrors';
+import { requestLogger, errorLogger } from './middlewares/logger';
 import router from './routes'
+import { linkPattern } from './contants';
 
 const { PORT = 3001, MONGO_URL = '' } = process.env;
 const helmet = require('helmet');
-
 const app = expess();
 
 app.use(json());
 app.use(helmet());
 
-app.use((req: Request, res: Response, next: NextFunction) => {
-    req.user = {
-      _id: '6628ba8e96fc4045a9318231',
-    };
+app.use(requestLogger);
+app.post('/signin', celebrate({
+  body: Joi.object().keys({
+    email: Joi.string().required().email(),
+    password: Joi.string().required(),
+  }),
+}), login);
 
-    next();
-});
+app.post('/signup', celebrate({
+    body: Joi.object().keys({
+      email: Joi.string().required().email(),
+      password: Joi.string().required(),
+      name: Joi.string().min(2).max(30),
+      about: Joi.string().min(2).max(30),
+      avatar: Joi.string().required().pattern(linkPattern)
+    })
+}), createUser); 
+
+app.use(auth);
 
 app.use(router);
+app.use(errorLogger);
+app.use(celebrateErrors());
+app.use(handleErrors);
 
 const connect = async () => {
     try {

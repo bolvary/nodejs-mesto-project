@@ -39,6 +39,8 @@
         ],
         "indent": ["error", 4, { "SwitchCase": 1 }],
         "max-len": ["error", { "code": 120 }],
-        "no-underscore-dangle": ["error", { "allow": ["_id"] }]
+        "no-underscore-dangle": ["error", { "allow": ["_id"] }],
+        "max-classes-per-file": ["error", 5],
+        "import/no-named-as-default": 0
     }
 }
