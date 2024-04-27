@@ -9,8 +9,9 @@ export interface IError extends Error {
 }
 
 const handleErrors = (err: IError & MongoodeError, req: Request, res: Response, next: NextFunction) => {
-    let statusCode = err.statusCode || constants.HTTP_STATUS_INTERNAL_SERVER_ERROR;
-    let message = err.message || 'Ошибка на стороне сервера';
+    const status500 = constants.HTTP_STATUS_INTERNAL_SERVER_ERROR;
+    let statusCode = err.statusCode || status500;
+    let message = statusCode === status500 ? 'Ошибка на стороне сервера' : err.message;
 
     if (err.message.startsWith('E11000')) {
         const error = new ConflictError();

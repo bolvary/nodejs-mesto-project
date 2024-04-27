@@ -3,7 +3,7 @@ import { constants } from 'http2';
 import { hash } from 'bcryptjs';
 import jwt, { Secret } from 'jsonwebtoken';
 
-import { ConflictError, NotFoundError } from '../helpers/errors';
+import { NotFoundError } from '../helpers/errors';
 import User from '../models/user';
 
 const { SECRET } = process.env;
@@ -11,10 +11,7 @@ const { SECRET } = process.env;
 export const createUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email } = req.body;
-        const candidate = await User.findOne({ email });
-        if (candidate) {
-            throw new ConflictError('Пользователь с таким email уже существует');
-        }
+        await User.findOne({ email });
         req.body.password = await hash(req.body.password, 10);
         const newUser = await User.create(req.body);
         return res.status(constants.HTTP_STATUS_CREATED).send(newUser);
@@ -61,13 +58,6 @@ export const updateMyProfile = async (req: Request, res: Response, next: NextFun
     try {
         const myId = req.user._id;
         const { name, about } = req.body;
-
-        if (!myId) {
-            return res.status(constants.HTTP_STATUS_NOT_FOUND).send({
-                message: 'Пользователь с указанным _id не найден',
-            });
-        }
-
         const newInfo = await User.findByIdAndUpdate({ _id: myId }, { name, about }, {
             new: true,
             runValidators: true,

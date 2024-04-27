@@ -17,11 +17,12 @@ export const deleteCardById = async (req: Request, res: Response, next: NextFunc
     try {
         const { cardId } = req.params;
         const userId = req.user._id;
-        const removeCard = await Card.findOneAndRemove({ _id: cardId, owner: userId });
+        const removeCard = await Card.findOne({ _id: cardId, owner: userId });
 
         if (!removeCard) {
             throw new AccessDenided('Нельзя удалить карточку, которая не принадлежит пользователю');
         }
+        await removeCard.deleteOne();
         return res.send({ message: 'Карточка удалена' });
     } catch (error) {
         return next(error);

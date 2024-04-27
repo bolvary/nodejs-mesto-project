@@ -15,7 +15,11 @@ cardRouter.post('/', celebrate({
         link: Joi.string().required().pattern(linkPattern),
     }),
 }), createCard);
-cardRouter.delete('/:cardId', deleteCardById);
+cardRouter.delete('/:cardId',celebrate({
+    params: Joi.object().keys({
+        cardId: Joi.string().required().alphanum().length(24),
+      }),
+}), deleteCardById);
 cardRouter.put('/:cardId/likes', likeCard);
 cardRouter.delete('/:cardId/likes', dislikeCard);
 
