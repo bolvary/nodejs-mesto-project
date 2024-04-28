@@ -10,8 +10,6 @@ const { SECRET } = process.env;
 
 export const createUser = async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { email } = req.body;
-        await User.findOne({ email });
         req.body.password = await hash(req.body.password, 10);
         const newUser = await User.create(req.body);
         return res.status(constants.HTTP_STATUS_CREATED).send(newUser);

@@ -44,7 +44,7 @@ export const likeCard = async (req: Request, res: Response, next: NextFunction) 
         const userId = req.user._id;
         const { cardId } = req.params;
 
-        const card = await Card.findByIdAndUpdate(
+        await Card.findByIdAndUpdate(
             {
                 _id: cardId,
                 likes: { $nin: [userId] },
@@ -52,9 +52,6 @@ export const likeCard = async (req: Request, res: Response, next: NextFunction) 
             { $addToSet: { likes: userId } },
             { new: true },
         );
-        if (!card) {
-            throw new NotFoundError('Карточки не существует или она была удалена');
-        }
         return res.send({ message: 'Лайк поставлен' });
     } catch (error) {
         return next(error);
@@ -70,7 +67,7 @@ export const dislikeCard = async (req: Request, res: Response, next: NextFunctio
             return res.status(constants.HTTP_STATUS_NOT_FOUND).send({ message: 'Передан несуществующий _id карточки' });
         }
 
-        const card = await Card.findByIdAndUpdate(
+        await Card.findByIdAndUpdate(
             {
                 _id: cardId,
                 likes: { $in: [userId] },
@@ -78,9 +75,6 @@ export const dislikeCard = async (req: Request, res: Response, next: NextFunctio
             { $pull: { likes: req.user._id } },
             { new: true },
         );
-        if (!card) {
-            throw new NotFoundError('Карточки не существует или она была удалена');
-        }
         return res.send({ message: 'Лайк снят' });
     } catch (error) {
         return next(error);
